@@ -3,21 +3,6 @@
 Учебная система проката спортивного инвентаря: **6 предметных контекстов, 13 бизнес-агрегатов**
 и отдельный **сервис авторизации**. Python 3.13+, FastAPI, PostgreSQL, Redis, RabbitMQ, gRPC.
 
-## Выполненные требования
-
-| № | Требование | Реализация |
-|---|---|---|
-| 1 | Контейнеры и Compose | Dockerfile каждого сервиса; `compose.yaml`; healthcheck и зависимости запуска |
-| 2 | Redis | Cache-aside чтения агрегатов, TTL 60 секунд, версия кеша меняется атомарно с данными |
-| 3 | PostgreSQL | Отдельные БД и роли сервисов, SQLAlchemy + psycopg, локальные транзакции |
-| 4 | Распределённая транзакция | Оркестрируемая saga в rental: резерв → оплата → выдача; при отказе — освобождение резерва |
-| 5 | Transactional outbox/inbox | Данные и outbox пишутся вместе; inbox и результат обработки фиксируются вместе |
-| 6 | Шина сообщений | RabbitMQ, durable queues, persistent messages, publisher confirms, manual ack, DLQ |
-| 7 | gRPC | rental синхронно вызывает customers.CheckEligibility перед бронированием |
-| 8 | JWT | auth: регистрация, вход, Argon2, RS256 JWT; роли reader/operator/admin |
-| 9 | Тесты | Unit-тесты всех 7 сервисов, компонентные проверки API/транзакций, полный интеграционный стенд |
-| 10 | GitLab CI | `.gitlab-ci.yml`: lint, unit/component, затем Compose integration с JUnit-отчётами |
-
 ## Быстрый запуск
 
 Нужны Docker с Compose v2.24+ и Python 3.13+. Выполняйте из корня репозитория:
