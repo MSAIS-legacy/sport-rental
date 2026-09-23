@@ -1,0 +1,93 @@
+name: sport-rental
+services:
+  catalog:
+    build: ./services/catalog
+    ports:
+      - "127.0.0.1:8001:8000"
+    environment:
+      DATABASE_PATH: /app/data/catalog.sqlite3
+    volumes:
+      - catalog_data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+  inventory:
+    build: ./services/inventory
+    ports:
+      - "127.0.0.1:8002:8000"
+    environment:
+      DATABASE_PATH: /app/data/inventory.sqlite3
+    volumes:
+      - inventory_data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+  rental:
+    build: ./services/rental
+    ports:
+      - "127.0.0.1:8003:8000"
+    environment:
+      DATABASE_PATH: /app/data/rental.sqlite3
+    volumes:
+      - rental_data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+  customers:
+    build: ./services/customers
+    ports:
+      - "127.0.0.1:8004:8000"
+    environment:
+      DATABASE_PATH: /app/data/customers.sqlite3
+    volumes:
+      - customers_data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+  billing:
+    build: ./services/billing
+    ports:
+      - "127.0.0.1:8005:8000"
+    environment:
+      DATABASE_PATH: /app/data/billing.sqlite3
+    volumes:
+      - billing_data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+  maintenance:
+    build: ./services/maintenance
+    ports:
+      - "127.0.0.1:8006:8000"
+    environment:
+      DATABASE_PATH: /app/data/maintenance.sqlite3
+    volumes:
+      - maintenance_data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+volumes:
+  catalog_data:
+  inventory_data:
+  rental_data:
+  customers_data:
+  billing_data:
+  maintenance_data:

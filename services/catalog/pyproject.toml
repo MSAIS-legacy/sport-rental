@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sport-rental-catalog"
+version = "0.1.0"
+description = "Каталог: independent REST microservice"
+requires-python = ">=3.13"
+dependencies = ["fastapi==0.141.1", "uvicorn==0.53.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
