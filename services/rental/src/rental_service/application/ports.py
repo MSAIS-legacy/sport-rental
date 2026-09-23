@@ -12,3 +12,11 @@ class UnitOfWork(Protocol):
 
     def __enter__(self) -> Self: ...
     def __exit__(self, exc_type, exc, traceback) -> None: ...
+
+
+class CustomerGateway(Protocol):
+    def validate_customer(self, customer_id: str) -> None: ...
+
+
+class DependencyUnavailable(Exception):
+    pass

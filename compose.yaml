@@ -118,6 +118,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       RABBITMQ_URL: amqp://rental:${RABBITMQ_PASSWORD}@rabbitmq:5672/
       JWT_PUBLIC_KEY_PATH: /run/secrets/jwt_public
+      CUSTOMERS_GRPC_ADDRESS: customers-grpc:50051
+      INTERNAL_RPC_TOKEN: ${INTERNAL_RPC_TOKEN}
     depends_on:
       postgres:
         condition: service_healthy
@@ -242,6 +244,20 @@ services:
       postgres:
         condition: service_healthy
     healthcheck: *id001
+  customers-grpc:
+    build:
+      context: .
+      dockerfile: services/customers/Dockerfile
+    command:
+    - python
+    - -m
+    - customers_service.grpc_server
+    environment:
+      DATABASE_URL: postgresql+psycopg://customers:${POSTGRES_PASSWORD}@postgres:5432/customers
+      INTERNAL_RPC_TOKEN: ${INTERNAL_RPC_TOKEN:?Run scripts/configure.py}
+    depends_on:
+      postgres:
+        condition: service_healthy
 volumes:
   postgres_data: null
   redis_data: null

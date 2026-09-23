@@ -1,0 +1,5 @@
+syntax = "proto3";
+package rental.customers.v1;
+service Customers { rpc CheckEligibility (EligibilityRequest) returns (EligibilityReply); }
+message EligibilityRequest { string customer_id = 1; }
+message EligibilityReply { bool exists = 1; bool allowed = 2; string reason = 3; }

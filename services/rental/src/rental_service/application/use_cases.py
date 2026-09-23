@@ -10,8 +10,9 @@ KINDS = {"tariffs": Tariff, "bookings": Booking, "contracts": RentalContract}
 
 
 class Service:
-    def __init__(self, uow_factory: Callable[[], UnitOfWork]):
+    def __init__(self, uow_factory: Callable[[], UnitOfWork], customer_gateway=None):
         self.uow_factory = uow_factory
+        self.customer_gateway = customer_gateway
 
     def get(self, kind: str, identifier: str):
         with self.uow_factory() as uow:
@@ -28,6 +29,8 @@ class Service:
             return entity
 
     def create_booking(self, customer_id, item_ids, start, end, tariff_id):
+        if self.customer_gateway:
+            self.customer_gateway.validate_customer(customer_id)
         period = Period(start, end)
         with self.uow_factory() as uow:
             tariff = uow.repository.get("tariffs", tariff_id, Tariff)

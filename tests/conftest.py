@@ -40,7 +40,14 @@ def client_factory(tmp_path, jwt_keys):
 
     def factory(service):
         module = importlib.import_module(f"{service}_service.main")
-        client = TestClient(module.create_app(str(tmp_path / f"{service}.sqlite3")))
+        from types import SimpleNamespace
+
+        extra = (
+            {"customer_gateway": SimpleNamespace(validate_customer=lambda _: None)}
+            if service == "rental"
+            else {}
+        )
+        client = TestClient(module.create_app(str(tmp_path / f"{service}.sqlite3"), **extra))
         from types import SimpleNamespace
 
         from rental_runtime.security import TokenIssuer

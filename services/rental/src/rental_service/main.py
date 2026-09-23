@@ -6,16 +6,28 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from rental_runtime.security import TokenVerifier, require_access
 
+from .application.ports import DependencyUnavailable
 from .application.use_cases import Service
 from .domain.errors import Conflict, DomainError, NotFound
+from .infrastructure.customers_grpc import GrpcCustomerGateway
 from .infrastructure.persistence import create_uow_factory
 from .presentation.routes import create_router
 
 
-def create_app(database_path: str | None = None) -> FastAPI:
+def create_app(database_path: str | None = None, customer_gateway=None) -> FastAPI:
     path = database_path or os.getenv("DATABASE_URL") or os.getenv("DATABASE_PATH", "data/rental.sqlite3")
-    service = Service(create_uow_factory(path, None if database_path else os.getenv("REDIS_URL")))
+    service = Service(
+        create_uow_factory(path, None if database_path else os.getenv("REDIS_URL")),
+        customer_gateway
+        or GrpcCustomerGateway(
+            os.getenv("CUSTOMERS_GRPC_ADDRESS", "localhost:50051"), os.getenv("INTERNAL_RPC_TOKEN", "")
+        ),
+    )
     app = FastAPI(title="Аренда — Sport Rental", version="0.1.0")
+
+    @app.exception_handler(DependencyUnavailable)
+    async def dependency_unavailable(request: Request, exc: DependencyUnavailable):
+        return JSONResponse(status_code=503, content={"detail": str(exc)})
 
     @app.exception_handler(DomainError)
     async def domain_error(request: Request, exc: DomainError):
