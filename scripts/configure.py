@@ -34,6 +34,9 @@ def main():
                 serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
             )
         )
+    # Родительская папка 0700 защищает ключ на хосте; файл читается
+    # непривилегированным пользователем контейнера через Docker secret.
+    (key_dir / "private.pem").chmod(0o444)
     print("Локальная конфигурация готова: .env (не добавляйте в Git).")
 
 

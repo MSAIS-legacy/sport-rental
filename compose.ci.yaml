@@ -1,0 +1,52 @@
+services:
+  catalog:
+    secrets: !reset []
+    volumes:
+      - ci_public:/run/ci-public:ro
+    environment:
+      JWT_PUBLIC_KEY_PATH: /run/ci-public/public.pem
+  inventory:
+    secrets: !reset []
+    volumes:
+      - ci_public:/run/ci-public:ro
+    environment:
+      JWT_PUBLIC_KEY_PATH: /run/ci-public/public.pem
+  rental:
+    secrets: !reset []
+    volumes:
+      - ci_public:/run/ci-public:ro
+    environment:
+      JWT_PUBLIC_KEY_PATH: /run/ci-public/public.pem
+  customers:
+    secrets: !reset []
+    volumes:
+      - ci_public:/run/ci-public:ro
+    environment:
+      JWT_PUBLIC_KEY_PATH: /run/ci-public/public.pem
+  billing:
+    secrets: !reset []
+    volumes:
+      - ci_public:/run/ci-public:ro
+    environment:
+      JWT_PUBLIC_KEY_PATH: /run/ci-public/public.pem
+  maintenance:
+    secrets: !reset []
+    volumes:
+      - ci_public:/run/ci-public:ro
+    environment:
+      JWT_PUBLIC_KEY_PATH: /run/ci-public/public.pem
+  auth:
+    secrets: !reset []
+    volumes:
+      - ci_public:/run/ci-public:ro
+      - ci_private:/run/ci-private:ro
+    environment:
+      JWT_PUBLIC_KEY_PATH: /run/ci-public/public.pem
+      JWT_PRIVATE_KEY_PATH: /run/ci-private/private.pem
+  tests:
+    volumes: !reset []
+volumes:
+  ci_public:
+    name: ${COMPOSE_PROJECT_NAME:-sport-rental}_ci-public
+  ci_private:
+    name: ${COMPOSE_PROJECT_NAME:-sport-rental}_ci-private

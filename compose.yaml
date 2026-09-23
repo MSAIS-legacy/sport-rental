@@ -1,13 +1,12 @@
 name: sport-rental
 services:
   postgres:
-    image: postgres:17-alpine
+    image: sport-rental-postgres:local
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/configure.py first}
     volumes:
     - postgres_data:/var/lib/postgresql/data
-    - ./infrastructure/postgres/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
     healthcheck:
       test:
       - CMD-SHELL
@@ -15,6 +14,8 @@ services:
       interval: 3s
       timeout: 3s
       retries: 30
+    build:
+      context: infrastructure/postgres
   redis:
     image: redis:7-alpine
     command:
@@ -78,6 +79,7 @@ services:
       retries: 30
     secrets:
     - jwt_public
+    image: sport-rental-catalog:local
   inventory:
     build:
       context: .
@@ -107,6 +109,7 @@ services:
       retries: 30
     secrets:
     - jwt_public
+    image: sport-rental-inventory:local
   rental:
     build:
       context: .
@@ -138,6 +141,7 @@ services:
       retries: 30
     secrets:
     - jwt_public
+    image: sport-rental-rental:local
   customers:
     build:
       context: .
@@ -167,6 +171,7 @@ services:
       retries: 30
     secrets:
     - jwt_public
+    image: sport-rental-customers:local
   billing:
     build:
       context: .
@@ -196,6 +201,7 @@ services:
       retries: 30
     secrets:
     - jwt_public
+    image: sport-rental-billing:local
   maintenance:
     build:
       context: .
@@ -225,6 +231,7 @@ services:
       retries: 30
     secrets:
     - jwt_public
+    image: sport-rental-maintenance:local
   auth:
     build:
       context: .
@@ -244,10 +251,8 @@ services:
       postgres:
         condition: service_healthy
     healthcheck: *id001
+    image: sport-rental-auth:local
   customers-grpc:
-    build:
-      context: .
-      dockerfile: services/customers/Dockerfile
     command:
     - python
     - -m
@@ -258,10 +263,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      customers:
+        condition: service_healthy
+    image: sport-rental-customers:local
   rental-worker:
-    build:
-      context: .
-      dockerfile: services/rental/Dockerfile
     command:
     - python
     - -m
@@ -274,11 +279,11 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      rental:
+        condition: service_healthy
     restart: unless-stopped
+    image: sport-rental-rental:local
   inventory-worker:
-    build:
-      context: .
-      dockerfile: services/inventory/Dockerfile
     command:
     - python
     - -m
@@ -291,11 +296,11 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      inventory:
+        condition: service_healthy
     restart: unless-stopped
+    image: sport-rental-inventory:local
   billing-worker:
-    build:
-      context: .
-      dockerfile: services/billing/Dockerfile
     command:
     - python
     - -m
@@ -308,7 +313,49 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      billing:
+        condition: service_healthy
     restart: unless-stopped
+    image: sport-rental-billing:local
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    profiles:
+    - test
+    environment:
+      RUN_INTEGRATION: '1'
+      SERVICE_URL_TEMPLATE: http://{service}:8000
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://rental:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+    volumes:
+    - ./test-results:/app/test-results
+    depends_on:
+      catalog:
+        condition: service_healthy
+      inventory:
+        condition: service_healthy
+      rental:
+        condition: service_healthy
+      customers:
+        condition: service_healthy
+      billing:
+        condition: service_healthy
+      maintenance:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+      rental-worker:
+        condition: service_started
+      inventory-worker:
+        condition: service_started
+      billing-worker:
+        condition: service_started
+      customers-grpc:
+        condition: service_started
 volumes:
   postgres_data: null
   redis_data: null

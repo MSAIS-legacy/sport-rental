@@ -5,6 +5,6 @@ build-backend = "setuptools.build_meta"
 name = "sport-rental-runtime"
 version = "0.2.0"
 requires-python = ">=3.13"
-dependencies = ["SQLAlchemy>=2.0.40,<2.1", "psycopg[binary]>=3.2,<4", "redis>=5,<8", "pika>=1.3,<2", "grpcio>=1.78,<2", "protobuf>=6.33,<8", "PyJWT[crypto]>=2.10,<3", "argon2-cffi>=23,<26", "fastapi==0.141.1"]
+dependencies = ["SQLAlchemy==2.0.54", "psycopg[binary]==3.3.6", "redis==8.1.0", "pika==1.4.4", "grpcio==1.84.0", "protobuf==7.36.2", "PyJWT[crypto]==2.15.0", "argon2-cffi==25.1.0", "fastapi==0.141.1"]
 [tool.setuptools.packages.find]
 where = ["src"]

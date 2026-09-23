@@ -1,0 +1,46 @@
+stages: [test, integration]
+
+unit-and-component:
+  stage: test
+  image: python:3.13-slim
+  script:
+    - pip install -r requirements-dev.txt
+    - ruff check .
+    - ruff format --check .
+    - python -m pytest tests --ignore=tests/integration --junitxml=test-results/unit-component.xml
+  artifacts:
+    when: always
+    reports:
+      junit: test-results/unit-component.xml
+    paths: [test-results/]
+
+integration:
+  stage: integration
+  image: docker:28-cli
+  services:
+    - name: docker:28-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_DRIVER: overlay2
+  before_script:
+    - apk add --no-cache python3 py3-cryptography
+    - python3 scripts/configure.py
+    - docker info
+  script:
+    - docker compose --profile test build
+    - sh scripts/ci_keys.sh
+    # CI сервис dind не видит bind mounts рабочей папки job.
+    - docker compose -f compose.yaml -f compose.ci.yaml up -d --wait --wait-timeout 180
+    - docker compose -f compose.yaml -f compose.ci.yaml --profile test run --name rental-ci-tests --no-deps tests
+  after_script:
+    - mkdir -p test-results
+    - docker cp rental-ci-tests:/app/test-results/. test-results/ || true
+    - docker compose -f compose.yaml -f compose.ci.yaml logs --no-color > test-results/compose.log || true
+    - docker compose -f compose.yaml -f compose.ci.yaml --profile test down -v --remove-orphans || true
+  artifacts:
+    when: always
+    reports:
+      junit: test-results/integration.xml
+    paths: [test-results/]
