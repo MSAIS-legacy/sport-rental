@@ -1,93 +1,148 @@
 name: sport-rental
 services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/configure.py first}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["redis_data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: rental
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Run scripts/configure.py first}
+    volumes: ["rabbitmq_data:/var/lib/rabbitmq"]
+    ports: ["127.0.0.1:15672:15672"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
   catalog:
-    build: ./services/catalog
-    ports:
-      - "127.0.0.1:8001:8000"
+    build:
+      context: .
+      dockerfile: services/catalog/Dockerfile
+    ports: ["127.0.0.1:8001:8000"]
     environment:
-      DATABASE_PATH: /app/data/catalog.sqlite3
-    volumes:
-      - catalog_data:/app/data
+      DATABASE_URL: postgresql+psycopg://catalog:${POSTGRES_PASSWORD}@postgres:5432/catalog
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://rental:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
-      interval: 10s
+      interval: 5s
       timeout: 3s
-      retries: 5
-      start_period: 10s
+      retries: 30
   inventory:
-    build: ./services/inventory
-    ports:
-      - "127.0.0.1:8002:8000"
+    build:
+      context: .
+      dockerfile: services/inventory/Dockerfile
+    ports: ["127.0.0.1:8002:8000"]
     environment:
-      DATABASE_PATH: /app/data/inventory.sqlite3
-    volumes:
-      - inventory_data:/app/data
+      DATABASE_URL: postgresql+psycopg://inventory:${POSTGRES_PASSWORD}@postgres:5432/inventory
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://rental:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
-      interval: 10s
+      interval: 5s
       timeout: 3s
-      retries: 5
-      start_period: 10s
+      retries: 30
   rental:
-    build: ./services/rental
-    ports:
-      - "127.0.0.1:8003:8000"
+    build:
+      context: .
+      dockerfile: services/rental/Dockerfile
+    ports: ["127.0.0.1:8003:8000"]
     environment:
-      DATABASE_PATH: /app/data/rental.sqlite3
-    volumes:
-      - rental_data:/app/data
+      DATABASE_URL: postgresql+psycopg://rental:${POSTGRES_PASSWORD}@postgres:5432/rental
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://rental:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
-      interval: 10s
+      interval: 5s
       timeout: 3s
-      retries: 5
-      start_period: 10s
+      retries: 30
   customers:
-    build: ./services/customers
-    ports:
-      - "127.0.0.1:8004:8000"
+    build:
+      context: .
+      dockerfile: services/customers/Dockerfile
+    ports: ["127.0.0.1:8004:8000"]
     environment:
-      DATABASE_PATH: /app/data/customers.sqlite3
-    volumes:
-      - customers_data:/app/data
+      DATABASE_URL: postgresql+psycopg://customers:${POSTGRES_PASSWORD}@postgres:5432/customers
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://rental:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
-      interval: 10s
+      interval: 5s
       timeout: 3s
-      retries: 5
-      start_period: 10s
+      retries: 30
   billing:
-    build: ./services/billing
-    ports:
-      - "127.0.0.1:8005:8000"
+    build:
+      context: .
+      dockerfile: services/billing/Dockerfile
+    ports: ["127.0.0.1:8005:8000"]
     environment:
-      DATABASE_PATH: /app/data/billing.sqlite3
-    volumes:
-      - billing_data:/app/data
+      DATABASE_URL: postgresql+psycopg://billing:${POSTGRES_PASSWORD}@postgres:5432/billing
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://rental:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
-      interval: 10s
+      interval: 5s
       timeout: 3s
-      retries: 5
-      start_period: 10s
+      retries: 30
   maintenance:
-    build: ./services/maintenance
-    ports:
-      - "127.0.0.1:8006:8000"
+    build:
+      context: .
+      dockerfile: services/maintenance/Dockerfile
+    ports: ["127.0.0.1:8006:8000"]
     environment:
-      DATABASE_PATH: /app/data/maintenance.sqlite3
-    volumes:
-      - maintenance_data:/app/data
+      DATABASE_URL: postgresql+psycopg://maintenance:${POSTGRES_PASSWORD}@postgres:5432/maintenance
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://rental:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
-      interval: 10s
+      interval: 5s
       timeout: 3s
-      retries: 5
-      start_period: 10s
+      retries: 30
 volumes:
-  catalog_data:
-  inventory_data:
-  rental_data:
-  customers_data:
-  billing_data:
-  maintenance_data:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:

@@ -7,13 +7,13 @@ from fastapi.responses import JSONResponse
 
 from .application.use_cases import Service
 from .domain.errors import Conflict, DomainError, NotFound
-from .infrastructure.sqlite import SQLiteUnitOfWork
+from .infrastructure.persistence import create_uow_factory
 from .presentation.routes import create_router
 
 
 def create_app(database_path: str | None = None) -> FastAPI:
-    path = database_path or os.getenv("DATABASE_PATH", "data/catalog.sqlite3")
-    service = Service(lambda: SQLiteUnitOfWork(path))
+    path = database_path or os.getenv("DATABASE_URL") or os.getenv("DATABASE_PATH", "data/catalog.sqlite3")
+    service = Service(create_uow_factory(path, None if database_path else os.getenv("REDIS_URL")))
     app = FastAPI(title="Каталог — Sport Rental", version="0.1.0")
 
     @app.exception_handler(DomainError)

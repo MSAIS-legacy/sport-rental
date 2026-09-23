@@ -15,7 +15,9 @@ def main():
     try:
         for port, name in enumerate(SERVICES, 8001):
             env = os.environ.copy()
-            env["PYTHONPATH"] = str(ROOT / "services" / name / "src")
+            env["PYTHONPATH"] = os.pathsep.join(
+                [str(ROOT / "services" / name / "src"), str(ROOT / "packages/runtime/src")]
+            )
             env["DATABASE_PATH"] = str(ROOT / "data" / f"{name}.sqlite3")
             processes.append(
                 subprocess.Popen(
