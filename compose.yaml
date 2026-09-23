@@ -258,6 +258,57 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+  rental-worker:
+    build:
+      context: .
+      dockerfile: services/rental/Dockerfile
+    command:
+    - python
+    - -m
+    - rental_service.worker
+    environment:
+      DATABASE_URL: postgresql+psycopg://rental:${POSTGRES_PASSWORD}@postgres:5432/rental
+      RABBITMQ_URL: amqp://rental:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+  inventory-worker:
+    build:
+      context: .
+      dockerfile: services/inventory/Dockerfile
+    command:
+    - python
+    - -m
+    - inventory_service.worker
+    environment:
+      DATABASE_URL: postgresql+psycopg://inventory:${POSTGRES_PASSWORD}@postgres:5432/inventory
+      RABBITMQ_URL: amqp://rental:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+  billing-worker:
+    build:
+      context: .
+      dockerfile: services/billing/Dockerfile
+    command:
+    - python
+    - -m
+    - billing_service.worker
+    environment:
+      DATABASE_URL: postgresql+psycopg://billing:${POSTGRES_PASSWORD}@postgres:5432/billing
+      RABBITMQ_URL: amqp://rental:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
 volumes:
   postgres_data: null
   redis_data: null

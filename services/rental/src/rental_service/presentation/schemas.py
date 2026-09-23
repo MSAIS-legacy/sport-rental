@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
@@ -26,3 +26,8 @@ class BookingCreate(Input):
 
 class ContractCreate(Input):
     booking_id: UUID
+
+
+class CheckoutCreate(Input):
+    booking_id: UUID
+    payment_token: Literal["demo-approved", "demo-declined"]

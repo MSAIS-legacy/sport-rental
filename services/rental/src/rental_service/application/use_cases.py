@@ -1,12 +1,13 @@
 from collections.abc import Callable
 from uuid import uuid4
 
+from ..domain.checkout import Checkout
 from ..domain.entities import Booking, RentalContract, Tariff
 from ..domain.errors import Conflict
 from ..domain.values import Period
 from .ports import UnitOfWork
 
-KINDS = {"tariffs": Tariff, "bookings": Booking, "contracts": RentalContract}
+KINDS = {"tariffs": Tariff, "bookings": Booking, "contracts": RentalContract, "checkouts": Checkout}
 
 
 class Service:
@@ -46,7 +47,7 @@ class Service:
             # Бронирования converted сохраняют резерв до закрытия договора.
             for existing in uow.repository.list("bookings", Booking):
                 if (
-                    existing.status in {"confirmed", "converted"}
+                    existing.status in {"confirmed", "converted", "checkout_pending"}
                     and set(existing.item_ids).intersection(item_ids)
                     and period.overlaps(Period(existing.start, existing.end))
                 ):
@@ -82,8 +83,41 @@ class Service:
         with self.uow_factory() as uow:
             entity = uow.repository.get("contracts", identifier, RentalContract)
             entity.close()
+            checkout = next(
+                (
+                    x
+                    for x in uow.repository.list("checkouts", Checkout)
+                    if x.contract_id == entity.id and x.status == "completed"
+                ),
+                None,
+            )
+            if checkout:
+                uow.enqueue("inventory", "inventory.return", {"saga_id": checkout.id})
             booking = uow.repository.get("bookings", entity.booking_id, Booking)
             booking.status = "completed"
             uow.repository.save("bookings", booking)
             uow.repository.save("contracts", entity)
             return entity
+
+    def start_checkout(self, booking_id, payment_token):
+        with self.uow_factory() as uow:
+            booking = uow.repository.get("bookings", booking_id, Booking)
+            existing = next(
+                (x for x in uow.repository.list("checkouts", Checkout) if x.booking_id == booking_id), None
+            )
+            if existing:
+                if existing.payment_token != payment_token:
+                    raise Conflict("Оформление уже начато с другим способом оплаты")
+                return existing
+            if booking.status != "confirmed":
+                raise Conflict("Бронирование недоступно для оформления")
+            checkout = Checkout(
+                booking.id, booking.id, str(uuid4()), booking.item_ids.copy(), booking.total, payment_token
+            )
+            booking.status = "checkout_pending"
+            uow.repository.save("bookings", booking)
+            uow.repository.save("checkouts", checkout)
+            uow.enqueue(
+                "inventory", "inventory.reserve", {"saga_id": checkout.id, "item_ids": checkout.item_ids}
+            )
+            return checkout

@@ -41,6 +41,8 @@ class Service:
     def change_item_status(self, identifier, status):
         with self.uow_factory() as uow:
             entity = uow.repository.get("items", identifier, InventoryItem)
+            if entity.allocation_id is not None:
+                raise Conflict("Состоянием экземпляра управляет процесс аренды")
             if entity.status == "in_transit" or status == "in_transit":
                 raise Conflict("Для перемещения используйте API transfers")
             entity.change_status(status)

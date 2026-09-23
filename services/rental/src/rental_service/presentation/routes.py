@@ -3,8 +3,9 @@ from uuid import UUID
 from fastapi import APIRouter
 
 from ..application.use_cases import Service
+from ..domain.checkout import Checkout
 from ..domain.entities import Booking, RentalContract, Tariff
-from .schemas import BookingCreate, ContractCreate, TariffCreate
+from .schemas import BookingCreate, CheckoutCreate, ContractCreate, TariffCreate
 
 
 def create_router(service: Service) -> APIRouter:
@@ -55,5 +56,13 @@ def create_router(service: Service) -> APIRouter:
     )
     def close_contract(identifier: UUID):
         return service.close_contract(str(identifier))
+
+    @router.post("/checkouts", response_model=Checkout, status_code=202, tags=["saga"])
+    def start_checkout(body: CheckoutCreate):
+        return service.start_checkout(**body.model_dump(mode="json"))
+
+    @router.get("/checkouts/{identifier}", response_model=Checkout, tags=["saga"])
+    def get_checkout(identifier: UUID):
+        return service.get("checkouts", str(identifier))
 
     return router

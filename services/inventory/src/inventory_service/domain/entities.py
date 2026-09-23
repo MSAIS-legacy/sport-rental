@@ -22,6 +22,7 @@ class InventoryItem:
     inventory_number: str
     point_id: str
     status: str = "available"
+    allocation_id: str | None = None
 
     def __post_init__(self):
         self.inventory_number = text(self.inventory_number, "Инвентарный номер")
@@ -55,3 +56,10 @@ class Transfer:
         if self.status != "in_transit":
             raise Conflict("Перемещение уже завершено")
         self.status = "completed"
+
+
+@dataclass
+class Allocation:
+    id: str
+    item_ids: list[str]
+    status: str = "reserved"
