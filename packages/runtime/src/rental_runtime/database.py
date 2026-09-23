@@ -3,7 +3,9 @@
 import json
 import threading
 from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
 from sqlalchemy import Column, Integer, MetaData, String, Table, Text, create_engine, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -22,6 +24,22 @@ versions = Table(
     metadata,
     Column("kind", String(80), primary_key=True),
     Column("revision", Integer, nullable=False),
+)
+
+
+outbox = Table(
+    "outbox",
+    metadata,
+    Column("id", String(100), primary_key=True),
+    Column("envelope", Text, nullable=False),
+    Column("published", Integer, nullable=False, default=0),
+    Column("created_at", String(50), nullable=False),
+)
+inbox = Table(
+    "inbox",
+    metadata,
+    Column("id", String(100), primary_key=True),
+    Column("processed_at", String(50), nullable=False),
 )
 
 
@@ -133,3 +151,41 @@ class SQLUnitOfWork:
                 self.connection.rollback()
         finally:
             self.connection.close()
+
+    def enqueue(self, target, event_type, payload):
+        identifier = str(uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        envelope = {
+            "id": identifier,
+            "type": event_type,
+            "target": target,
+            "payload": payload,
+            "created_at": now,
+            "version": 1,
+        }
+        self.connection.execute(
+            outbox.insert().values(id=identifier, envelope=json.dumps(envelope), published=0, created_at=now)
+        )
+        return identifier
+
+    def seen(self, identifier):
+        return (
+            self.connection.execute(select(inbox.c.id).where(inbox.c.id == identifier)).scalar() is not None
+        )
+
+    def remember(self, identifier):
+        self.connection.execute(
+            inbox.insert().values(id=identifier, processed_at=datetime.now(timezone.utc).isoformat())
+        )
+
+    def pending_events(self, limit=50):
+        rows = self.connection.execute(
+            select(outbox.c.envelope)
+            .where(outbox.c.published == 0)
+            .order_by(outbox.c.created_at, outbox.c.id)
+            .limit(limit)
+        ).scalars()
+        return [json.loads(row) for row in rows]
+
+    def mark_published(self, identifier):
+        self.connection.execute(outbox.update().where(outbox.c.id == identifier).values(published=1))
