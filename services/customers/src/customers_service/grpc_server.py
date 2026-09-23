@@ -7,7 +7,9 @@ from .infrastructure.persistence import create_uow_factory
 
 def main():
     service = Service(create_uow_factory(os.getenv("DATABASE_URL", "data/customers.sqlite3")))
-    server, _ = start_server(service, os.environ["INTERNAL_RPC_TOKEN"], "[::]:50051")
+    server, _ = start_server(
+        service, os.environ["INTERNAL_RPC_TOKEN"], os.getenv("GRPC_BIND_ADDRESS", "[::]:50051")
+    )
     try:
         server.wait_for_termination()
     except KeyboardInterrupt:

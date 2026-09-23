@@ -1,25 +1,15 @@
-# Учёт инвентаря
+# inventory
 
-Самостоятельный микросервис `inventory`, локальный порт `8002`.
+Самостоятельный пакет микросервиса, REST-порт 8002, Swagger: http://localhost:8002/docs.
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-uvicorn inventory_service.main:app --reload --port 8002
-```
+Внутри `src/inventory_service`: domain, application, infrastructure, presentation и main.py.
+Сервис владеет отдельной PostgreSQL-базой `inventory`. Внешние адаптеры общей технической
+библиотеки подключаются только на внешних слоях чистой архитектуры.
 
-Swagger: http://localhost:8002/docs, OpenAPI: `/openapi.json`.
-Проверка запуска: `GET /health`. REST API: `/api/v1`.
+Запуск из корня репозитория: `docker compose up -d --build inventory`.
+Для полной системы и saga используйте `docker compose up -d --build`.
+Подготовка .env, ключей JWT, локальная разработка и тесты описаны
+в [корневом README](../../README.md).
 
-База SQLite задаётся переменной `DATABASE_PATH`, по умолчанию `data/inventory.sqlite3`.
-Настоящий файл базы создаётся при первом обращении к данным.
-Каждый сервис использует собственную базу и не импортирует код соседних сервисов.
-
-- `domain`: агрегаты, объекты-значения, бизнес-правила и ошибки.
-- `application`: сценарии использования и порты Repository / UnitOfWork.
-- `infrastructure`: SQLite-реализация портов.
-- `presentation`: REST-маршруты и входные DTO Pydantic.
-- `main.py`: сборка зависимостей и обработчики ошибок.
-
-Описание ограничений и общие инструкции: [корневой README](../../README.md).
+Пакет для локальной разработки: `pip install -e packages/runtime -e services/inventory`
+из корня репозитория. В PyCharm используйте интерпретатор общей `.venv`.

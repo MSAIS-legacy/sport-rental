@@ -1,199 +1,227 @@
-# Sport Rental — прокат спортивного инвентаря
+# Sport Rental — DDD, микросервисы и распределённые взаимодействия
 
-Учебный проект по DDD и чистой архитектуре: **6 самостоятельных REST-микросервисов, 13 агрегатов**.
-Python 3.13+, FastAPI, Pydantic, SQLite, pytest. Каждый сервис имеет собственные
-`pyproject.toml`, Dockerfile, пакет Python, HTTP-приложение и базу данных.
+Учебная система проката спортивного инвентаря: **6 предметных контекстов, 13 бизнес-агрегатов**
+и отдельный **сервис авторизации**. Python 3.13+, FastAPI, PostgreSQL, Redis, RabbitMQ, gRPC.
 
-## Сервисы
+## Выполненные требования
 
-| Проект | Ограниченный контекст | Агрегаты / REST-ресурсы | Swagger после запуска |
-|---|---|---|---|
-| `services/catalog` | Каталог | Category (`categories`), EquipmentModel (`models`) | http://localhost:8001/docs |
-| `services/inventory` | Учёт инвентаря | RentalPoint (`points`), InventoryItem (`items`), Transfer (`transfers`) | http://localhost:8002/docs |
-| `services/rental` | Аренда | Tariff (`tariffs`), Booking (`bookings`), RentalContract (`contracts`) | http://localhost:8003/docs |
-| `services/customers` | Работа с клиентами | Customer (`customers`) | http://localhost:8004/docs |
-| `services/billing` | Расчёты | Payment (`payments`), Deposit (`deposits`) | http://localhost:8005/docs |
-| `services/maintenance` | Обслуживание | ServiceOrder (`orders`), DamageReport (`damage-reports`) | http://localhost:8006/docs |
+| № | Требование | Реализация |
+|---|---|---|
+| 1 | Контейнеры и Compose | Dockerfile каждого сервиса; `compose.yaml`; healthcheck и зависимости запуска |
+| 2 | Redis | Cache-aside чтения агрегатов, TTL 60 секунд, версия кеша меняется атомарно с данными |
+| 3 | PostgreSQL | Отдельные БД и роли сервисов, SQLAlchemy + psycopg, локальные транзакции |
+| 4 | Распределённая транзакция | Оркестрируемая saga в rental: резерв → оплата → выдача; при отказе — освобождение резерва |
+| 5 | Transactional outbox/inbox | Данные и outbox пишутся вместе; inbox и результат обработки фиксируются вместе |
+| 6 | Шина сообщений | RabbitMQ, durable queues, persistent messages, publisher confirms, manual ack, DLQ |
+| 7 | gRPC | rental синхронно вызывает customers.CheckEligibility перед бронированием |
+| 8 | JWT | auth: регистрация, вход, Argon2, RS256 JWT; роли reader/operator/admin |
+| 9 | Тесты | Unit-тесты всех 7 сервисов, компонентные проверки API/транзакций, полный интеграционный стенд |
+| 10 | GitLab CI | `.gitlab-ci.yml`: lint, unit/component, затем Compose integration с JUnit-отчётами |
 
-## Быстрый запуск без Docker
+## Быстрый запуск
 
-В терминале из корня проекта:
+Нужны Docker с Compose v2.24+ и Python 3.13+. Выполняйте из корня репозитория:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements-dev.txt
-python scripts/run_local.py
+pip install -r requirements-dev.txt
+python scripts/configure.py
+docker compose up -d --build --wait --wait-timeout 180
+python scripts/demo.py
 ```
 
-Скрипт запускает шесть отдельных процессов Uvicorn. Ctrl+C останавливает их все.
-Базы сохраняются в `data/`. После запуска откройте Swagger по адресам из таблицы.
-Для демонстрации в другом терминале, из корня проекта:
+`configure.py` создаёт `.env` и RSA-ключи в `.secrets/`. Эти файлы исключены из Git,
+существующие значения не перезаписываются. Закрытый ключ получает только auth;
+остальным API доступен публичный ключ. `.env` содержит случайные пароли PostgreSQL,
+RabbitMQ и начального администратора. Не меняйте пароль БД в `.env` отдельно от самой БД:
+инициализация ролей выполняется при первом создании тома.
 
-```bash
-.venv/bin/python scripts/demo.py
-```
+`demo.py` входит под локальным администратором и показывает две реальные saga:
+успешное оформление с возвратом и отказ оплаты с компенсацией. Секреты и JWT в вывод
+не попадают. Данные демо остаются в PostgreSQL.
 
-Скрипт создаёт учебные данные для всех 13 типов агрегатов и выполняет операции
-бронирования, оплаты, возврата, перемещения и обслуживания. Его можно запускать повторно:
-он создаёт новый набор данных. Финансовые операции только учитываются локально;
-реальные банковские списания не выполняются.
-
-## Запуск через Docker Compose
-
-Сначала запустите Docker Desktop или другой совместимый Docker daemon.
-
-```bash
-docker compose up --build -d
-docker compose ps
-```
-
-Каждый контейнер слушает порт 8000, снаружи сервисы доступны на портах 8001–8006.
-Порты опубликованы только на `127.0.0.1`. База каждого сервиса хранится в отдельном
-именованном томе. Остановка с сохранением данных:
+Остановка с сохранением данных:
 
 ```bash
 docker compose down
 ```
 
-## Запуск отдельного проекта в PyCharm
+## Сервисы и API
 
-Можно открыть корневую папку либо любой каталог `services/<имя>` как отдельный проект.
-Для одного сервиса создайте интерпретатор Python 3.13+ и установите пакет из его каталога:
+| Контекст / проект | Агрегаты | Swagger |
+|---|---|---|
+| catalog | Category, EquipmentModel | http://localhost:8001/docs |
+| inventory | RentalPoint, InventoryItem, Transfer | http://localhost:8002/docs |
+| rental | Tariff, Booking, RentalContract | http://localhost:8003/docs |
+| customers | Customer | http://localhost:8004/docs |
+| billing | Payment, Deposit | http://localhost:8005/docs |
+| maintenance | ServiceOrder, DamageReport | http://localhost:8006/docs |
+| auth | User — учётная запись | http://localhost:8007/docs |
 
-```bash
-pip install -e .
-uvicorn catalog_service.main:app --reload --port 8001
+`Checkout` и `Allocation` дополнительно хранят состояние распределённого процесса.
+Это техническое расширение модели для saga; исходные 13 предметных агрегатов сохранены.
+
+Бизнес-ресурсы доступны под `/api/v1`: создание, список, получение по UUID и отдельные
+операции изменения состояния. `/health`, `/docs` и `/openapi.json` открыты без JWT.
+Все бизнес-операции требуют `Authorization: Bearer <access_token>`.
+В Swagger нажмите **Authorize** и вставьте токен из `POST /api/v1/auth/token`.
+
+- `POST /api/v1/auth/register` — `{username, password}`, создаёт только reader.
+- `POST /api/v1/auth/token` — `{username, password}`, возвращает JWT на 15 минут.
+- `PATCH /api/v1/auth/users/{id}/role` — `{role}`, доступно только admin.
+- reader может читать ресурсы, operator и admin — изменять.
+- Учётная запись auth и клиент customers — разные объекты; в учебной версии
+  роли относятся к сотрудникам/наблюдателям, объектные права «только свои аренды» не реализованы.
+
+Все денежные суммы — целые **копейки RUB**. Даты — ISO 8601 с часовым поясом.
+HTTP: 201 создание; 202 запуск saga; 200 чтение/действие; 401 нет корректного JWT;
+403 недостаточно прав; 404 объект не найден; 409 конфликт; 422 некорректные данные;
+503 недоступен синхронный gRPC-сервис.
+
+## Распределённая транзакция
+
+1. Создайте модель, пункт и экземпляр инвентаря, клиента, тариф.
+2. `POST /api/v1/bookings`: `customer_id`, `item_ids`, `start`, `end`, `tariff_id`.
+   Rental проверяет клиента по gRPC и отсутствие пересекающихся резервов в своей БД.
+3. `POST /api/v1/checkouts`:
+
+```json
+{"booking_id":"UUID бронирования","payment_token":"demo-approved"}
 ```
 
-Здесь показан `catalog`; точные команды для остальных сервисов приведены в их README.
-Для Run Configuration в PyCharm используйте Module name `uvicorn`, Parameters
-`catalog_service.main:app --reload --port 8001`, Working directory `services/catalog`.
-Для индивидуального запуска путь базы задаётся переменной окружения `DATABASE_PATH`.
-По умолчанию это `data/<имя>.sqlite3` относительно рабочей папки.
+4. Ответ `202` содержит `id` процесса. Опрос `GET /api/v1/checkouts/{id}` показывает статус.
+5. Для отказа оплаты используйте **новое бронирование** и `payment_token: "demo-declined"`.
+   Это симулятор оплаты; реальный банк не подключён.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Rental
+    participant MQ as RabbitMQ
+    participant Inventory
+    participant Billing
+    Client->>Rental: POST /checkouts
+    Rental->>MQ: inventory.reserve (outbox)
+    MQ->>Inventory: резервирование
+    Inventory->>MQ: inventory.reserved
+    MQ->>Rental: резерв подтверждён
+    Rental->>MQ: billing.charge
+    MQ->>Billing: оплата
+    alt Оплата успешна
+        Billing->>MQ: billing.paid
+        MQ->>Rental: результат оплаты
+        Rental->>MQ: inventory.issue
+        MQ->>Inventory: выдать
+        Inventory->>MQ: inventory.issued
+        MQ->>Rental: создать договор, completed
+    else Оплата отклонена
+        Billing->>MQ: billing.failed
+        MQ->>Rental: отказ
+        Rental->>MQ: inventory.release
+        MQ->>Inventory: освободить резерв
+        Inventory->>MQ: inventory.released
+        MQ->>Rental: отменить бронирование, compensated
+    end
+```
+
+Статусы: `reserving → paying → issuing → completed` либо
+`reserving → paying → compensating → compensated`. Недоступный инвентарь даёт `rejected`.
+Повтор `POST /checkouts` с тем же бронированием и способом оплаты возвращает тот же процесс.
+Закрытие договора через `POST /contracts/{id}/close` отправляет асинхронную команду возврата.
+Ручное изменение состояния экземпляра, которым управляет saga, запрещено.
+
+Старый `POST /contracts` сохранён для изолированного учебного сценария; он не запускает
+распределённую транзакцию. Для демонстрации интеграции используйте `/checkouts`.
 
 ## Чистая архитектура
 
 ```text
-services/catalog/
-├── pyproject.toml
-├── Dockerfile
-├── README.md
-└── src/catalog_service/
-    ├── domain/
-    │   ├── entities.py       # агрегаты и поведение
-    │   ├── values.py         # объекты-значения и проверки
-    │   └── errors.py         # бизнес-ошибки
-    ├── application/
-    │   ├── ports.py          # интерфейсы Repository и UnitOfWork
-    │   └── use_cases.py      # сценарии использования
-    ├── infrastructure/
-    │   └── sqlite.py         # хранение и транзакции
-    ├── presentation/
-    │   ├── schemas.py        # входные DTO и валидация REST
-    │   └── routes.py         # HTTP-обработчики
-    └── main.py               # связывание реализаций и запуск
+services/<context>/src/<context>_service/
+├── domain/           # агрегаты, значения, бизнес-ошибки
+├── application/      # сценарии, порты, обработчики шагов saga
+├── infrastructure/   # SQL-адаптер, gRPC, криптография
+├── presentation/     # REST-маршруты и DTO
+├── main.py           # сборка HTTP-приложения
+└── worker.py         # сборка обработчика сообщений, где нужен
+packages/runtime/     # общая техническая библиотека: SQL, кеш, transport, JWT, protobuf
 ```
 
-Одинаковая структура используется во всех шести проектах.
+Зависимости направлены внутрь: presentation → application → domain;
+infrastructure реализует порты; `main.py` связывает реализации. Доменные слои не зависят
+от FastAPI, SQLAlchemy, Redis или RabbitMQ. Предметные сервисы не импортируют модели
+соседних сервисов. Общая библиотека содержит только технические адаптеры и wire-контракт gRPC.
 
-Направление зависимостей:
+В Compose дополнительно запускаются три worker-процесса и customers-grpc. Они используют
+те же образы и базы, что соответствующие API, но работают независимо от HTTP-запросов.
+Базы содержат таблицы `aggregates`, `cache_versions`, `outbox`, `inbox`.
+Подробности гарантий и ограничений: [docs/architecture.md](docs/architecture.md).
 
-```text
-presentation → application → domain
-infrastructure → application (порты), domain
-main → все слои (composition root)
-```
-
-`domain` использует только стандартную библиотеку Python. `application` не импортирует
-FastAPI, SQLite или другие внешние адаптеры. Репозиторий и транзакция внедряются через
-`UnitOfWork`. HTTP-слой проверяет форму запроса, вызывает сценарий и преобразует результат
-в JSON. Агрегаты содержат правила переходов состояния и проверки своих значений.
-Изменения нескольких агрегатов внутри одного сервиса выполняются атомарно.
-
-Каждый сервис владеет своей SQLite-базой. Другие сервисы не читают её и не импортируют
-его Python-код. Связи между контекстами представлены UUID. Подробности:
-[docs/architecture.md](docs/architecture.md).
-
-## REST API
-
-Префикс ресурсов: `/api/v1`. Для каждого ресурса реализованы:
-
-- `POST /api/v1/<resource>` — создание;
-- `GET /api/v1/<resource>` — список;
-- `GET /api/v1/<resource>/{id}` — получение по UUID.
-
-Дополнительные бизнес-операции:
-
-| Сервис | Метод и путь после `/api/v1` | Тело |
-|---|---|---|
-| catalog | `POST /models/{id}/unpublish` | — |
-| inventory | `PATCH /items/{id}/status` | `{"status":"rented"}` (`available`, `rented`, `maintenance`) |
-| inventory | `POST /transfers/{id}/complete` | — |
-| customers | `POST /customers/{id}/block` | `{"reason":"Нарушение условий"}` |
-| customers | `POST /customers/{id}/unblock` | — |
-| rental | `POST /bookings/{id}/cancel` | — |
-| rental | `POST /contracts/{id}/close` | — |
-| billing | `POST /payments/{id}/confirm` | — |
-| billing | `POST /payments/{id}/refunds` | `{"amount":10000}` |
-| billing | `POST /deposits/{id}/settlements` | `{"amount":10000,"kind":"return"}` или `kind=withhold` с `reason` |
-| maintenance | `POST /orders/{id}/complete` | `{"result":"Работы выполнены"}` |
-
-Деньги передаются целым числом **копеек**, валюта учебной версии — RUB.
-Даты — ISO 8601 с часовым поясом, например `2027-01-01T12:00:00+04:00`.
-Интервал аренды полуоткрытый: `[start, end)`, соседние интервалы допустимы.
-Стоимость равна суточной ставке × количеству начатых суток × количеству экземпляров.
-Сумма фиксируется в бронировании и переносится в договор.
-
-Ответы: `201` — создание, `200` — чтение или действие, `404` — объект не найден,
-`409` — конфликт состояния, `422` — некорректный запрос или нарушение правила значения.
-Общий пример создания категории:
+## Тесты
 
 ```bash
-curl -X POST http://localhost:8001/api/v1/categories \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Велосипеды"}'
-```
-
-Полные схемы запросов/ответов доступны в Swagger и `/openapi.json` каждого сервиса.
-Удаление истории и произвольное редактирование статусов не добавлены: изменения
-выполняются через явные бизнес-операции.
-
-## Проверки
-
-```bash
-python -m pytest
+# Настоящие unit-тесты: внешние порты заменены in-memory реализацией.
+python -m pytest tests/unit
+# Компонентные API, транзакции, JWT, outbox/inbox и saga; без внешней инфраструктуры.
+python -m pytest tests --ignore=tests/integration
 ruff check .
 ruff format --check .
-docker compose config --quiet
+# Полная интеграция с PostgreSQL, Redis, RabbitMQ и gRPC.
+docker compose --profile test build tests
+docker compose --profile test run --rm tests
 ```
 
-Проверяются REST API всех сервисов, сохранение данных после пересоздания приложения,
-конкурентное бронирование, границы интервалов, откат транзакции при частично выполненном
-перемещении, лимиты денежных операций и направление зависимостей слоёв.
+Интеграционные тесты создают отдельные сущности с уникальными идентификаторами.
+Они проверяют запись в PostgreSQL, кеш и его обновление, блокировку клиента по gRPC,
+успех/компенсацию saga, повторную доставку сообщения и роли JWT.
+Без `RUN_INTEGRATION=1` эти тесты явно пропускаются. Контейнер `tests` выставляет флаг.
+JUnit-отчёт находится в `test-results/integration.xml`.
 
-При подготовке проекта: **18 тестов прошли на Python 3.14.3**; пройден HTTP-сценарий
-через шесть реальных процессов; конфигурация Compose валидна. Контейнерная сборка
-не запускалась: Docker daemon был выключен. Возможное предупреждение Starlette
-об устаревании httpx в TestClient не влияет на результат тестов.
+## GitLab CI
 
-## Границы учебной реализации
+Пайплайн создаётся при push в GitLab:
 
-Это работающие самостоятельные сервисы с базовыми сценариями, а не полная промышленная
-система. Внешние UUID проверяются по формату, но **не запрашиваются у соседних сервисов**.
-Например, rental пока не проверяет блокировку клиента или техническое состояние
-оборудования; закрытие договора само по себе не меняет статус в inventory.
-Демонстрационный скрипт явно выполняет связанные запросы.
+1. `unit-and-component`: линтер, форматирование и тесты без внешней инфраструктуры.
+2. `integration`: сборка образов, полный Compose-стенд и интеграционные тесты.
 
-Автоматическое взаимодействие через HTTP-адаптеры или события, outbox/inbox, саги,
-авторизация, платёжный провайдер, автоматическое истечение резервов и пагинация —
-следующие этапы. API не следует публиковать в интернет без авторизации.
-В текущей модели один договор создаётся из одного бронирования и закрывается целиком.
-Детальные позиции актов и работ, вложения и частичный возврат инвентаря упрощены.
+Нужен GitLab Runner с Docker executor и **privileged Docker-in-Docker** для второго job.
+Ключи и пароли генерируются заново на job, не требуются сохранённые CI-секреты.
+`compose.ci.yaml` и `scripts/ci_keys.sh` передают временные ключи в отдельные Docker volumes,
+поскольку daemon внутри dind не видит файловую систему job. Приватный ключ не встраивается
+в образы. Пайплайн сохраняет JUnit и логи, затем удаляет временные контейнеры и тома CI.
 
-SQLite хранит JSON-снимки агрегатов и сериализует команды через `BEGIN IMMEDIATE`.
-Это обеспечивает атомарность локальных проверок, но ограничивает производительность:
-для масштабирования потребуется отдельная СУБД каждого сервиса и миграции схемы.
+Настройка runner и фактический запуск удалённого GitLab pipeline выполняются на стороне GitLab.
+Самостоятельной публикации коммитов в удалённый репозиторий проект не делает.
 
-Подход к разделению HTTP-маршрутов использует
-[официальную документацию FastAPI](https://fastapi.tiangolo.com/tutorial/bigger-applications/).
+## Локальная разработка в PyCharm
+
+Откройте корень проекта и выберите `.venv/bin/python`. Для запуска процессов Python на
+хосте сначала поднимите только инфраструктуру с локальными портами:
+
+```bash
+docker compose -f compose.yaml -f compose.dev.yaml up -d postgres redis rabbitmq
+python scripts/run_local.py
+```
+
+Скрипт читает `.env`, запускает 7 API, 3 workers и gRPC; Ctrl+C завершает все процессы.
+Не запускайте одновременно HTTP-сервисы Compose и `run_local.py`: они используют одинаковые порты.
+Для отдельного пакета установите `pip install -e packages/runtime -e services/<context>`.
+Изменения `.proto` генерируются командой `python scripts/generate_proto.py`.
+
+RabbitMQ UI: http://localhost:15672; пользователь `rental`, пароль — из `.env`.
+PostgreSQL, Redis и gRPC в обычном Compose не публикуются на хосте.
+
+## Учебные упрощения
+
+- Агрегаты хранятся JSON-снимками. Схема создаётся идемпотентно при первом подключении;
+  для дальнейшего развития понадобятся версионированные миграции.
+- Локальные изменения сериализуются advisory-lock в каждой PostgreSQL-БД;
+  для больших нагрузок нужны более точные блокировки и индексы.
+- Доставка сообщений **at least once**, повторный эффект предотвращает inbox.
+  Длительная недоступность участника оставляет saga в промежуточном состоянии до восстановления;
+  тайм-аут саги, ручное разрешение DLQ и возврат реального банковского платежа пока не реализованы.
+- gRPC внутри закрытой сети использует сервисный токен без TLS. Для внешних сетей нужен mTLS.
+- JWT живёт 15 минут; отзыв выданных токенов, refresh tokens и немедленное применение
+  изменённых ролей к уже выданным токенам не реализованы.
+- Redis допускает отказ с чтением из БД. Межконтекстная согласованность достигается постепенно.
+- Частичный возврат оборудования, периодическое истечение бронирований и полный аудит — вне этого этапа.
