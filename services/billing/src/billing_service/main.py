@@ -2,8 +2,9 @@
 
 import os
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
+from rental_runtime.security import TokenVerifier, require_access
 
 from .application.use_cases import Service
 from .domain.errors import Conflict, DomainError, NotFound
@@ -30,7 +31,8 @@ def create_app(database_path: str | None = None) -> FastAPI:
     def health():
         return {"status": "ok", "service": "billing"}
 
-    app.include_router(create_router(service), prefix="/api/v1")
+    app.state.token_verifier = TokenVerifier()
+    app.include_router(create_router(service), prefix="/api/v1", dependencies=[Depends(require_access)])
     return app
 
 
